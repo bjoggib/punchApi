@@ -25,7 +25,7 @@ router.get("/companies", function (req, res) {
 		}
 		var companyList = [];
 		for (var i = 0; i < companies.length; i++) {
-			var comp = { 
+			var comp = {
 				name: companies[i].name,
 				punches: companies[i].punches
 			};
@@ -58,6 +58,7 @@ router.post("/companies", validate(Validation.companyValidation), function (req,
 		if (err) {
 			return res.status(404).send({ "err": "not found" });
 		}
+		console.log(users);
 		return res.status(201).json(newCompany);
 	});
 });
@@ -82,9 +83,9 @@ router.get("/users", function (req, res) {
 
 
 router.post("/users", validate(Validation.userValidation), function (req, res) {
-	
+
 	var userToken = req.headers.authorization;
-	
+
 	if (userToken !== adminToken) {
 		return res.status(401).json( {"err": "not authorized"} );
 	}
@@ -98,23 +99,24 @@ router.post("/users", validate(Validation.userValidation), function (req, res) {
 
 		    	var ex = 'punchcardApi';
 		    	var key = 'user.add';
-		    	var msg = 'New user was added.';
+		    	var msg = "Name: " + users.name + " Gender: " + users.gender +
+										" ID: " + users._id + " Date: " + Date.now();
 
 		    	ch.assertExchange(ex, 'topic', {durable: false});
 		    	ch.publish(ex, key, new Buffer(msg));
-		    	console.log(" [x] Sent %s:'%s'", key, "a new user was created: name: " + newUser.name + "id: " + newUser._id);
+		    	console.log(msg);
 		    });
 
 		  	setTimeout(function() { conn.close(); }, 500);
 		});
-		return res.status(201).json(newUser.token);
+		return res.status(201).json(users.token);
 	});
 
 });
 
 
 router.post("/my/punches", validate(Validation.punchValidation), function (req, res) {
-	
+
 	var userToken = req.headers.authorization;
 	console.log("usertoken: " + userToken);
 	var currentUserId;
@@ -133,14 +135,13 @@ router.post("/my/punches", validate(Validation.punchValidation), function (req, 
 				company_id: companyId,
 				user_id: currentUserId
 			};
-			
+
 			Punches.addPunch(newPunch, function (err, punch) {
 				if (err) {
 					return res.status(404).json({ "err": "not found" });
-				} 
+				}
 				Punches.countPunchesForUser({ user_id: currentUserId, company_id: companyId, used: false }, function (err, punches) {
 					if (err) {
-
 						console.log(err);
 						return;
 					}
@@ -148,13 +149,28 @@ router.post("/my/punches", validate(Validation.punchValidation), function (req, 
 						Punches.update(punches);
 						return res.send({ discount: true });
 					}
-					return res.status(201).json({ "punch_id": punch._id });	
+
+					amqp.connect('amqp://localhost', function(err, conn) {
+							conn.createChannel(function(err, ch) {
+
+						    	var ex = 'punchcardApi';
+						    	var key = 'punch.add';
+						    	var msg = "Name: " + user.name + " Gender: " + " ID: " + user._id + " Company name: " +
+													company.name + " Company ID: " + company._id + " Company punchcount: " + company.punches +
+													" Date of punch: " + Date.now() + " Unused punches: " + (company.punches - punches.length);
+
+						    	ch.assertExchange(ex, 'topic', {durable: false});
+						    	ch.publish(ex, key, new Buffer(msg));
+						    	console.log(msg);
+						  });
+
+						  setTimeout(function() { conn.close(); }, 500);
+					});
+					return res.status(201).json({ "punch_id": punch._id });
 				});
-			});	
+			});
 		});
-	});	
+	});
 });
 
 module.exports = router;
-
-
